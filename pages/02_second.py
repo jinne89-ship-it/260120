@@ -1,97 +1,130 @@
 import streamlit as st
-from PIL import Image
-import requests
-from io import BytesIO
+import pandas as pd
+import folium
+from streamlit_folium import st_folium
 
-# 1. 페이지 기본 설정
-st.set_page_config(
-    page_title="홍길동의 포트폴리오",
-    page_icon="👋",
-    layout="wide"
+st.title("🚗서울시 공영주차장 요금 추천앱🪄")
+def format_time(hhmm): 
+    if pd.isnull(hhmm): 
+        return "-" 
+    s = str(hhmm).zfill(4) 
+    h = int(s[:2]) 
+    m = int(s[2:]) 
+    return f"{h}:{m:02d}"
+
+def calc_fee(row, total_minutes, day_type):
+    # 요일별 컬럼명 매핑
+    if day_type == "평일":
+        base_time_col = '기본 주차 시간(분 단위)'
+        base_fee_col = '기본 주차 요금'
+        add_unit_time_col = '추가 단위 시간(분 단위)'
+        add_unit_fee_col = '추가 단위 요금'
+        max_fee_col = '일 최대 요금'
+    elif day_type == "토요일":
+        base_time_col = '토요일 기본 주차 시간(분 단위)'
+        base_fee_col = '토요일 기본 주차 요금'
+        add_unit_time_col = '토요일 추가 단위 시간(분 단위)'
+        add_unit_fee_col = '토요일 추가 단위 요금'
+        max_fee_col = '토요일 일 최대 요금'
+    else:  # 공휴일
+        base_time_col = '공휴일 기본 주차 시간(분 단위)'
+        base_fee_col = '공휴일 기본 주차 요금'
+        add_unit_time_col = '공휴일 추가 단위 시간(분 단위)'
+        add_unit_fee_col = '공휴일 추가 단위 요금'
+        max_fee_col = '공휴일 일 최대 요금'
+
+    try:
+        기본시간 = float(row.get(base_time_col, row.get('기본 주차 시간(분 단위)')))
+        기본요금 = float(row.get(base_fee_col, row.get('기본 주차 요금')))
+        추가단위시간 = float(row.get(add_unit_time_col, row.get('추가 단위 시간(분 단위)')))
+        추가단위요금 = float(row.get(add_unit_fee_col, row.get('추가 단위 요금')))
+        raw_max = row.get(max_fee_col, row.get('일 최대 요금'))
+        일최대요금 = float(raw_max) if pd.notna(raw_max) else None
+        total_minutes = float(total_minutes)
+    except Exception:
+        return float('inf')
+
+    # 필수값 체크
+    if any([
+        pd.isna(기본시간) or 기본시간 < 0,
+        pd.isna(기본요금) or 기본요금 < 0,
+        pd.isna(추가단위시간) or 추가단위시간 <= 0,
+        pd.isna(추가단위요금) or 추가단위요금 < 0
+    ]):
+        return float('inf')
+
+    if total_minutes <= 기본시간:
+        fee = 기본요금
+    else:
+        extra_minutes = total_minutes - 기본시간
+        units = int((extra_minutes + 추가단위시간 - 1) // 추가단위시간)
+        fee = 기본요금 + units * 추가단위요금
+
+    if (일최대요금 is not None) and (fee > 일최대요금):
+        fee = 일최대요금
+
+    return fee
+
+# 데이터
+df = pd.read_csv("https://raw.githubusercontent.com/lime122613/vibecoding/main/seoul_public_parking.csv", encoding="cp949") 
+df = df.dropna(subset=['위도', '경도']) 
+df['구'] = df['주소'].apply(lambda x: x.split()[0] if '구' in x else '') 
+gu_list = sorted(df['구'].unique()) 
+selected_gu = st.selectbox("구를 선택하세요", gu_list) 
+filtered = df[df['구'] == selected_gu]
+
+st.markdown("---")
+st.subheader("💸주차 요금 비교하기")
+day_type = st.radio("주차할 요일을 선택해주세요", ["평일", "토요일", "공휴일"])
+total_minutes = st.slider(
+    "주차할 시간(분)을 선택하세요",
+    min_value=10, max_value=720, step=10, value=60
 )
 
-# 2. 프로필 이미지 불러오기 (URL 사용 예시)
-# 실제 사용 시에는 본인의 로컬 이미지 경로(예: "my_photo.jpg")를 사용하거나
-# 아래처럼 웹상의 이미지 주소를 사용할 수 있습니다.
-def load_image(url):
-    response = requests.get(url)
-    return Image.open(BytesIO(response.content))
+# 요금 계산 및 정렬
+filtered['예상요금'] = filtered.apply(lambda row: calc_fee(row, total_minutes, day_type), axis=1)
+filtered = filtered[filtered['예상요금'] != float('inf')].copy()
+filtered = filtered.sort_values('예상요금')
+filtered['추천'] = ""
+if not filtered.empty:
+    filtered.iloc[0, filtered.columns.get_loc('추천')] = "⭐️추천"
 
-# 예시용 이미지 (실제 앱에서는 본인 사진 경로로 변경하세요: st.image("profile.jpg"))
-image_url = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80"
+st.write(f"총 {len(filtered)}개 주차장 검색됨 (예상 요금 오름차순)")
+st.dataframe(filtered[[
+    '추천', '주차장명', '주소', '예상요금', '기본 주차 시간(분 단위)',
+    '기본 주차 요금', '추가 단위 요금', '추가 단위 시간(분 단위)', '일 최대 요금'
+]])
 
-# --- 사이드바 (연락처 및 간략 정보) ---
-with st.sidebar:
-    try:
-        # 로컬 파일 사용 시: image = Image.open("profile.jpg")
-        st.image(image_url, caption="홍길동", use_column_width=True)
-    except:
-        st.warning("이미지를 불러올 수 없습니다.")
-    
-    st.markdown("### Contact Info")
-    st.info("📧 email@example.com")
-    st.info("📞 010-1234-5678")
-    st.success("🔗 [GitHub](https://github.com)")
-    st.success("🔗 [LinkedIn](https://linkedin.com)")
-    
-    st.markdown("---")
-    st.write("📍 Seoul, South Korea")
+# 지도
+center_lat = filtered['위도'].astype(float).mean() if not filtered.empty else 37.5665
+center_lon = filtered['경도'].astype(float).mean() if not filtered.empty else 126.9780
+m = folium.Map(location=[center_lat, center_lon], zoom_start=13)
 
-# --- 메인 화면 구성 ---
+for _, row in filtered.iterrows():
+    tooltip_text = (
+        f"총 주차면: {int(row['총 주차면'])}개<br>"
+        f"기본 주차 요금: {int(row['기본 주차 요금'])}원 ({int(row['기본 주차 시간(분 단위)'])}분당)<br>"
+        f"평일: {format_time(row['평일 운영 시작시각(HHMM)'])} ~ {format_time(row['평일 운영 종료시각(HHMM)'])}<br>"
+        f"주말: {format_time(row['주말 운영 시작시각(HHMM)'])} ~ {format_time(row['주말 운영 종료시각(HHMM)'])}<br>"
+        f"공휴일: {format_time(row['공휴일 운영 시작시각(HHMM)'])} ~ {format_time(row['공휴일 운영 종료시각(HHMM)'])}<br>"
+    )
+    popup_text = (
+        f"<b>{row['주차장명']}</b><br>"
+        f"주소: {row['주소']}<br>" 
+        f"전화번호: {row['전화번호']}<br>" 
+        f"운영구분: {row['운영구분명']}<br>" 
+        f"예상요금: {int(row['예상요금'])}원<br>" 
+        f"기본 주차 시간: {row['기본 주차 시간(분 단위)']}분<br>" 
+        f"기본 주차 요금: {row['기본 주차 요금']}원<br>" 
+        f"추가 단위 요금: {row['추가 단위 요금']}원<br>" 
+        f"추가 단위 시간: {row['추가 단위 시간(분 단위)']}분<br>" 
+        f"일 최대 요금: {row['일 최대 요금']}"
+    )
+    folium.Marker(
+        location=[float(row['위도']), float(row['경도'])],
+        popup=folium.Popup(popup_text, max_width=350, min_width=200),
+        tooltip=tooltip_text,
+        icon=folium.Icon(color='red' if row['추천'] else 'blue')
+    ).add_to(m)
 
-# 헤더 섹션 (인사말)
-col1, col2 = st.columns([2, 1]) # 텍스트 영역을 좀 더 넓게 배분
-
-with col1:
-    st.title("안녕하세요! 👋")
-    st.header("데이터를 사랑하는 개발자, 홍길동입니다.")
-    st.write("""
-    저는 **Python**과 **데이터 분석**에 열정을 가지고 있는 개발자입니다.
-    복잡한 문제를 기술로 해결하는 것을 좋아하며, 항상 새로운 것을 배우기 위해 노력합니다.
-    """)
-
-# 탭을 사용하여 내용 분리 (깔끔한 UI)
-tab1, tab2, tab3 = st.tabs(["📚 자기소개", "🛠 기술 스택", "🚀 프로젝트"])
-
-with tab1:
-    st.subheader("About Me")
-    st.write("""
-    - **성격:** 긍정적이고 협업을 중시합니다.
-    - **취미:** 코딩, 등산, 기술 블로그 운영
-    - **목표:** 사람들에게 도움이 되는 서비스를 만드는 풀스택 데이터 사이언티스트
-    """)
-    st.markdown("### 🎓 학력")
-    st.write("- OO대학교 컴퓨터공학과 졸업 (2018 - 2022)")
-
-with tab2:
-    st.subheader("Skills")
-    # 컬럼을 나누어 스킬 나열
-    skill_col1, skill_col2, skill_col3 = st.columns(3)
-    with skill_col1:
-        st.markdown("**Languages**")
-        st.write("- Python, Java, SQL")
-    with skill_col2:
-        st.markdown("**Frameworks**")
-        st.write("- Streamlit, Django, Flask")
-    with skill_col3:
-        st.markdown("**Tools**")
-        st.write("- Git, Docker, AWS")
-
-with tab3:
-    st.subheader("My Projects")
-    
-    # 프로젝트 1
-    st.markdown("#### 1. 영화 추천 시스템 웹 앱")
-    st.write("사용자의 취향을 분석하여 영화를 추천해주는 머신러닝 프로젝트입니다.")
-    st.caption("사용 기술: Python, Scikit-learn, Streamlit")
-    
-    st.divider() # 구분선
-    
-    # 프로젝트 2
-    st.markdown("#### 2. 주식 가격 예측 대시보드")
-    st.write("LSTM 모델을 활용하여 주가 변동을 예측하고 시각화했습니다.")
-    st.caption("사용 기술: TensorFlow, Pandas, Plotly")
-
-# --- 푸터 ---
-st.write("---")
-st.write("© 2024 Hong Gil Dong. All rights reserved.")
+st_folium(m, width=1200, height=650)
