@@ -1,178 +1,216 @@
 import streamlit as st
 import time
+from urllib.parse import quote
 
 # 1. 페이지 설정
 st.set_page_config(
-    page_title="Woman's Health Care AI",
-    page_icon="🧘‍♀️",
+    page_title="My AI Health Coach",
+    page_icon="🧬",
     layout="wide"
 )
 
-# 2. 스타일링 (여성 타겟에 맞춰 조금 더 부드러운 톤으로 변경 가능하나, 가독성을 위해 기존 유지)
+# 2. CSS 스타일링
 st.markdown("""
     <style>
+    .big-font { font-size: 20px !important; font-weight: bold; }
     .card {
         padding: 20px;
         border-radius: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        margin-bottom: 15px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
         background-color: white;
     }
-    .workout-card { border-top: 5px solid #FF6B6B; } /* 조금 더 부드러운 레드 */
-    .food-card { border-top: 5px solid #51CF66; }   /* 조금 더 부드러운 그린 */
-    
-    .card-title {
-        font-size: 1.1em;
+    .workout-card { border-left: 6px solid #FF4B4B; }
+    .diet-card { border-left: 6px solid #00C851; }
+    .youtube-btn {
+        background-color: #FF0000;
+        color: white !important;
+        padding: 6px 12px;
+        border-radius: 20px;
+        text-decoration: none;
+        font-size: 0.8rem;
         font-weight: bold;
-        color: #333;
-        margin-bottom: 5px;
+        display: inline-block;
+        margin-top: 8px;
     }
-    .kcal-tag {
-        font-size: 0.85em;
-        font-weight: bold;
-        color: #555;
-        background-color: #f8f9fa;
-        padding: 4px 8px;
-        border-radius: 12px;
-    }
+    .youtube-btn:hover { background-color: #CC0000; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 데이터베이스 정의 (성인 여성 60kg 기준 수정)
-
-# [운동 DB] 체중 감소에 따라 소모 칼로리 약 20% 하향 조정
-workout_db = {
-    "상체 (라인/탄력)": {
-        "exercises": [
-            {"name": "니 푸시업 (무릎대고)", "set": "3세트 x 12회", "kcal": 45},
-            {"name": "덤벨 킥백 (팔뚝)", "set": "3세트 x 15회", "kcal": 35},
-            {"name": "랫 풀 다운", "set": "4세트 x 12회", "kcal": 60}
-        ],
-        "cardio": {"name": "가벼운 조깅 20분", "kcal": 160},
-        "total_burn": 300
-    },
-    "하체 (힙업/슬림)": {
-        "exercises": [
-            {"name": "와이드 스쿼트", "set": "4세트 x 15회", "kcal": 90},
-            {"name": "덩키 킥 (힙업)", "set": "3세트 x 20회", "kcal": 50},
-            {"name": "런지", "set": "3세트 x 15회", "kcal": 70}
-        ],
-        "cardio": {"name": "실내 자전거 20분", "kcal": 180},
-        "total_burn": 390
-    },
-    "전신 (지방 연소)": {
-        "exercises": [
-            {"name": "슬로우 버피", "set": "3세트 x 10회", "kcal": 100},
-            {"name": "마운틴 클라이머", "set": "3세트 x 30초", "kcal": 80},
-            {"name": "점핑잭 (팔벌려뛰기)", "set": "3세트 x 30회", "kcal": 60}
-        ],
-        "cardio": {"name": "인터벌 러닝 20분", "kcal": 210},
-        "total_burn": 450
-    }
-}
-
-# [식단 DB] 기초대사량 고려하여 섭취 칼로리 재조정
-# 다이어트: ~1200kcal, 유지: ~1600kcal, 증량: ~1900kcal
-diet_db = {
-    "체중 감량 (Diet)": {
-        "breakfast": {"menu": "그릭요거트 & 베리류", "kcal": 200},
-        "lunch": {"menu": "닭가슴살 샐러드 & 단호박", "kcal": 350},
-        "dinner": {"menu": "연어 포케 (밥 적게)", "kcal": 400},
-        "snack": {"menu": "방울토마토 & 아몬드 5알", "kcal": 100},
-        "total_intake": 1050
-    },
-    "근육 증가 (Toning)": {
-        "breakfast": {"menu": "베이글 1/2 & 스크램블 에그", "kcal": 350},
-        "lunch": {"menu": "일반식 (잡곡밥 1/2공기)", "kcal": 550},
-        "dinner": {"menu": "소고기 안심 & 구운 야채", "kcal": 450},
-        "snack": {"menu": "프로틴 쉐이크 & 바나나", "kcal": 250},
-        "total_intake": 1600
-    },
-    "건강 유지 (Balance)": {
-        "breakfast": {"menu": "사과 1개 & 삶은 계란 2개", "kcal": 250},
-        "lunch": {"menu": "비빔밥 (고추장 적게)", "kcal": 500},
-        "dinner": {"menu": "두부면 파스타 & 닭가슴살", "kcal": 350},
-        "snack": {"menu": "두유 & 견과류", "kcal": 150},
-        "total_intake": 1250
-    }
-}
-
-# 4. 사이드바 설정
-with st.sidebar:
-    st.header("⚙️ 퍼스널 설정")
-    name = st.text_input("닉네임", "건강한습관")
-    target_part = st.selectbox("오늘의 운동 목표", list(workout_db.keys()))
-    diet_goal = st.radio("식단 목표", list(diet_db.keys()))
+# 3. 계산 함수 (해리스-베네딕트 공식 수정판)
+def calculate_metrics(height, weight, age, gender):
+    # BMI 계산
+    bmi = weight / ((height / 100) ** 2)
     
-    st.write("---")
-    # 기준 변경 안내
-    st.caption("※ 칼로리는 성인 여성 60kg 기준 추정치입니다.")
-    st.caption("(기초대사량 및 활동량에 따라 개인차가 있을 수 있습니다.)")
+    # BMR(기초대사량) 계산
+    if gender == "남성":
+        bmr = 88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age)
+    else:
+        bmr = 447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age)
+    
+    return bmi, bmr
+
+# 4. 사이드바: 사용자 정보 입력
+with st.sidebar:
+    st.header("📋 내 신체 정보 입력")
+    name = st.text_input("닉네임", "도전하는나")
+    gender = st.radio("성별", ["여성", "남성"])
+    age = st.number_input("나이 (만)", 20, 80, 25)
+    height = st.number_input("키 (cm)", 140, 200, 163)
+    current_weight = st.number_input("현재 몸무게 (kg)", 30, 150, 60)
+    target_weight = st.number_input("🎯 목표 몸무게 (kg)", 30, 150, 55)
+    
+    st.divider()
+    
+    # 목표 분석
+    weight_diff = current_weight - target_weight
+    if weight_diff > 0:
+        goal_type = "lose" # 감량
+        goal_text = f"📉 {weight_diff:.1f}kg 감량 필요"
+        color = "red"
+    elif weight_diff < 0:
+        goal_type = "gain" # 증량
+        goal_text = f"📈 {abs(weight_diff):.1f}kg 증량 필요"
+        color = "blue"
+    else:
+        goal_type = "maintain"
+        goal_text = "✨ 현재 체중 유지"
+        color = "green"
+        
+    st.markdown(f"### 현재 목표: :{color}[{goal_text}]")
+    if st.button("솔루션 생성하기 🧬"):
+        st.session_state['analyzed'] = True
 
 # 5. 메인 로직
-w_data = workout_db[target_part]
-d_data = diet_db[diet_goal]
+st.title(f"🧬 {name}님의 맞춤형 목표 달성 플랜")
 
-st.title(f"🧘‍♀️ {name}님의 웰니스 리포트")
-st.markdown("여성 평균 신체 데이터를 기반으로 분석된 오늘의 루틴입니다.")
-st.divider()
+if 'analyzed' not in st.session_state:
+    st.info("👈 왼쪽 사이드바에 정보를 입력하고 '솔루션 생성하기'를 눌러주세요!")
+else:
+    # (1) 신체 지표 분석 및 칼로리 목표 설정
+    bmi, bmr = calculate_metrics(height, current_weight, age, gender)
+    tdee = bmr * 1.55 # 활동대사량 (보통 활동 기준)
+    
+    if goal_type == "lose":
+        target_kcal = tdee - 500  # 감량 시 -500kcal
+        diet_desc = "체지방 감소를 위한 '저탄수화물 고단백' 식단"
+        workout_desc = "지방 연소를 극대화하는 '서킷 트레이닝 & 유산소'"
+    elif goal_type == "gain":
+        target_kcal = tdee + 300  # 증량 시 +300kcal
+        diet_desc = "근성장을 위한 '탄수화물 및 단백질 충분' 식단"
+        workout_desc = "근비대를 위한 '고중량 저반복 웨이트'"
+    else:
+        target_kcal = tdee
+        diet_desc = "건강 유지를 위한 '탄단지 밸런스' 식단"
+        workout_desc = "체력 유지를 위한 '전신 근력 & 가벼운 유산소'"
 
-# [섹션 1] 칼로리 대시보드
-col1, col2, col3 = st.columns(3)
-col1.metric("🔥 운동 소모", f"-{w_data['total_burn']} kcal", "Target Burn")
-col2.metric("🥗 식단 섭취", f"+{d_data['total_intake']} kcal", "Clean Food")
-net_kcal = d_data['total_intake'] - w_data['total_burn']
-col3.metric("⚖️ 에너지 밸런스", f"{net_kcal} kcal", "Today's Total")
+    # (2) 대시보드 출력
+    st.divider()
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("BMI 지수", f"{bmi:.1f}", "정상: 18.5~23")
+    c2.metric("기초대사량(BMR)", f"{int(bmr)} kcal")
+    c3.metric("하루 권장 칼로리", f"{int(target_kcal)} kcal", f"목표 달성용")
+    c4.metric("목표 체중까지", f"{abs(weight_diff):.1f} kg", "남음")
+    
+    # BMI 상태 바
+    st.write("###### 📊 나의 BMI 위치")
+    bmi_progress = min(max((bmi - 10) / 30, 0.0), 1.0) # 10~40 범위 정규화
+    st.progress(bmi_progress)
+    
+    # (3) 추천 로직 데이터베이스 (조건부 선택)
+    if goal_type == "lose":
+        # 다이어트 운동 리스트
+        strength_list = [
+            ("버피 테스트", "전신 체지방 연소 끝판왕"),
+            ("마운틴 클라이머", "복근과 유산소를 동시에"),
+            ("스쿼트 & 숄더프레스", "상하체 동시 자극으로 칼로리 태우기")
+        ]
+        cardio_rec = "인터벌 러닝 (1분 전력질주 / 2분 걷기) x 5세트"
+        
+        # 다이어트 식단
+        meals = {
+            "아침": "그릭요거트(100g), 사과 반쪽, 삶은 계란 1개",
+            "점심": "현미밥 1/2공기, 닭가슴살 샐러드, 오리엔탈 드레싱",
+            "저녁": "단호박 찜, 연어 구이, 아스파라거스",
+            "간식": "방울토마토, 아몬드 10알"
+        }
+        
+    elif goal_type == "gain":
+        # 벌크업 운동 리스트
+        strength_list = [
+            ("벤치 프레스", "상체 근육 매스 증가"),
+            ("데드리프트", "전신 근력 및 등 근육 발달"),
+            ("바벨 스쿼트", "하체 근육 및 남성 호르몬 촉진")
+        ]
+        cardio_rec = "가벼운 사이클 15분 (워밍업 위주)"
+        
+        # 벌크업 식단
+        meals = {
+            "아침": "오트밀 죽, 스크램블 에그 3개, 바나나 1개",
+            "점심": "백미밥, 제육볶음(살코기 위주), 쌈채소",
+            "저녁": "파스타(면 많이), 부채살 스테이크",
+            "간식": "프로틴 쉐이크, 식빵 2장 & 땅콩버터"
+        }
+        
+    else: # 유지
+        strength_list = [
+            ("플랭크", "코어 안정화"),
+            ("런지", "균형 감각 및 하체 라인"),
+            ("푸시업", "기초 상체 근력")
+        ]
+        cardio_rec = "조깅 30분 or 수영"
+        
+        meals = {
+            "아침": "통밀 토스트, 계란후라이, 우유",
+            "점심": "한식 일반식 (국물 적게)",
+            "저녁": "닭가슴살 카레라이스",
+            "간식": "하루견과 1봉"
+        }
 
-st.write("") 
+    # (4) 2단 컬럼 출력 (운동 vs 식단)
+    st.markdown("---")
+    col_left, col_right = st.columns([1, 1])
+    
+    # 왼쪽: 운동 추천
+    with col_left:
+        st.subheader(f"🏋️‍♂️ {workout_desc}")
+        
+        # 근력 운동 반복 출력
+        for ex_name, ex_desc in strength_list:
+            search_query = quote(f"{ex_name} 올바른 자세")
+            yt_url = f"https://www.youtube.com/results?search_query={search_query}"
+            
+            st.markdown(f"""
+            <div class="card workout-card">
+                <div style="font-weight:bold; font-size:1.1em;">{ex_name}</div>
+                <div style="color:#666; font-size:0.9em;">{ex_desc}</div>
+                <a href="{yt_url}" target="_blank" class="youtube-btn">▶️ 유튜브 운동법 보기</a>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        # 유산소 카드
+        st.info(f"🏃 **추천 유산소**: {cardio_rec}")
 
-# [섹션 2] 운동 & 식단 카드
-c1, c2 = st.columns([1, 1])
-
-with c1:
-    st.subheader("💪 오늘의 운동 (Workout)")
-    for ex in w_data['exercises']:
+    # 오른쪽: 식단 추천
+    with col_right:
+        st.subheader(f"🥗 {diet_desc}")
+        
         st.markdown(f"""
-        <div class="card workout-card">
-            <div class="card-title">📌 {ex['name']}</div>
-            <p style="color:#666; margin-bottom:5px;">{ex['set']}</p>
-            <span class="kcal-tag">🔥 약 {ex['kcal']} kcal 소모</span>
+        <div class="card diet-card">
+            <h4 style="margin-top:0;">📋 오늘의 식단 플랜</h4>
+            <p><strong>🌅 아침:</strong> {meals['아침']}</p>
+            <p><strong>☀️ 점심:</strong> {meals['점심']}</p>
+            <p><strong>🌙 저녁:</strong> {meals['저녁']}</p>
+            <p><strong>🍪 간식:</strong> {meals['간식']}</p>
+            <hr>
+            <p style="text-align:right; font-weight:bold; color:#00C851;">
+                목표 섭취량: 약 {int(target_kcal)} kcal
+            </p>
         </div>
         """, unsafe_allow_html=True)
         
-    cardio = w_data['cardio']
-    st.markdown(f"""
-    <div class="card workout-card" style="background-color: #FFF5F5;">
-        <div class="card-title">🏃 유산소 마무리</div>
-        <p style="color:#666; margin-bottom:5px;">{cardio['name']}</p>
-        <span class="kcal-tag">🔥 약 {cardio['kcal']} kcal 소모</span>
-    </div>
-    """, unsafe_allow_html=True)
+        st.warning("💡 **Tip**: 물은 하루 2리터 이상 충분히 섭취하세요!")
 
-with c2:
-    st.subheader("🥑 오늘의 식단 (Diet)")
-    meals = [
-        ("🌅 아침", d_data['breakfast']),
-        ("☀️ 점심", d_data['lunch']),
-        ("🌙 저녁", d_data['dinner']),
-        ("🍪 간식", d_data['snack'])
-    ]
-    
-    for title, info in meals:
-        st.markdown(f"""
-        <div class="card food-card">
-            <div class="card-title">{title}</div>
-            <p style="color:#666; margin-bottom:5px;">{info['menu']}</p>
-            <span class="kcal-tag" style="color: #2b8a3e; background-color: #ebfbee;">
-                🥗 {info['kcal']} kcal
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
-
-# 6. 하단 인터랙션
-st.divider()
-if st.button("✨ 오늘 하루 완료! (기록하기)"):
-    with st.spinner("데이터 저장 중..."):
-        time.sleep(1)
-    st.balloons()
-    st.success(f"{name}님, 오늘도 건강한 하루를 보내셨네요! 내일도 함께해요! 💖")
+    # 푸터
+    st.divider()
+    st.caption("※ 본 결과는 일반적인 공식을 기반으로 한 추정치이며, 전문 의료 상담을 대체할 수 없습니다.")
