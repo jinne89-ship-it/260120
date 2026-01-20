@@ -53,7 +53,7 @@ col1, col2 = st.columns(2)
 with col1:
     name = st.text_input("💋 이름을 알려줘:", "")
 with col2:
-    birthday = st.date_input("🎂 생일을 선택해줘:", datetime.date(2000, 1, 1))
+    birthday = st.date_input("🎂 생일을 선택해줘:", datetime.date(1970, 10, 06))
 
 # ----------------- 🌟 별자리 계산 -----------------
 zodiac_signs = {
