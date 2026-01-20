@@ -1,103 +1,147 @@
 import streamlit as st
 import pandas as pd
+import time
 
-# 🎨 페이지 설정 (가장 상단에 위치해야 함)
+# 1. 페이지 설정 (가장 상단)
 st.set_page_config(
-    page_title="내 꿈을 찾는 MBTI 진로 탐색",
-    page_icon="🚀",
+    page_title="오늘의 운동 루틴 추천",
+    page_icon="💪",
     layout="wide"
 )
 
-# ✨ 커스텀 스타일 적용 (CSS)
+# 2. 커스텀 CSS (카드 디자인 및 버튼 스타일)
 st.markdown("""
     <style>
-    .main {
-        background-color: #f0f2f6;
+    .workout-card {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-bottom: 15px;
+        border-top: 5px solid #FF4B4B;
+        transition: transform 0.3s;
+    }
+    .workout-card:hover {
+        transform: scale(1.02);
+    }
+    .card-title {
+        font-size: 1.2em;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 10px;
+    }
+    .card-desc {
+        color: #666;
+        font-size: 0.9em;
     }
     .stButton>button {
         width: 100%;
         border-radius: 20px;
-        height: 3em;
-        background-color: #FF4B4B;
-        color: white;
         font-weight: bold;
-    }
-    .title-text {
-        text-align: center;
-        color: #1E1E1E;
-        font-family: 'Nanum Gothic', sans-serif;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# 🏆 제목 및 헤더
-st.markdown("<h1 class='title-text'>🌈 MBTI 맞춤형 진로 탐색 센터 🚀</h1>", unsafe_allow_html=True)
-st.write("---")
-
-# 📊 데이터 정의 (MBTI별 특징 및 직업)
-mbti_data = {
-    "ISTJ": {"emoji": "🧐", "desc": "청렴결백한 논리주의자", "jobs": ["회계사", "공무원", "군인", "데이터 분석가"]},
-    "ISFJ": {"emoji": "🛡️", "desc": "용감한 수호자", "jobs": ["간호사", "초등교사", "사회복지사", "도서관장"]},
-    "INFJ": {"emoji": "🧙", "desc": "선의의 옹호자", "jobs": ["상담사", "작가", "교육혁신가", "인사전문가"]},
-    "INTJ": {"emoji": "🧠", "desc": "용의주도한 전략가", "jobs": ["전략 기획가", "대학교수", "IT 아키텍트", "연구원"]},
-    "ISTP": {"emoji": "🛠️", "desc": "만능 재주꾼", "jobs": ["엔지니어", "파일럿", "소방관", "시스템 개발자"]},
-    "ISFP": {"emoji": "🎨", "desc": "호기심 많은 예술가", "jobs": ["디자이너", "작곡가", "수의사", "조경가"]},
-    "INFP": {"emoji": "🌻", "desc": "열정적인 중재자", "jobs": ["심리치료사", "에디터", "일러스트레이터", "인권활동가"]},
-    "INTP": {"emoji": "🔬", "desc": "논리적인 사색가", "jobs": ["프로그래머", "수학자", "철학자", "경제학자"]},
-    "ESTP": {"emoji": "⚡", "desc": "모험을 즐기는 사업가", "jobs": ["사업가", "스포츠 매니저", "경찰관", "부동산 중개인"]},
-    "ESFP": {"emoji": "🥳", "desc": "자유로운 영혼의 연예인", "jobs": ["배우", "이벤트 기획자", "홍보 전문가", "승무원"]},
-    "ENFP": {"emoji": "🎈", "desc": "재기발랄한 활동가", "jobs": ["마케터", "방송 PD", "카운슬러", "여행가"]},
-    "ENTP": {"emoji": "💡", "desc": "뜨거운 논쟁을 즐기는 변론가", "jobs": ["변호사", "카피라이터", "정치인", "창업가"]},
-    "ESTJ": {"emoji": "📊", "desc": "엄격한 관리자", "jobs": ["경영자", "은행원", "프로젝트 매니저", "법률가"]},
-    "ESFJ": {"emoji": "🤝", "desc": "사교적인 외교관", "jobs": ["인사과 직원", "호텔리어", "초등교사", "홍보 담당자"]},
-    "ENFJ": {"emoji": "🎤", "desc": "정의로운 사회운동가", "jobs": ["코치", "정치인", "커뮤니케이션 전문가", "교사"]},
-    "ENTJ": {"emoji": "🏢", "desc": "대담한 통솔자", "jobs": ["CEO", "경제 분석가", "경영 컨설턴트", "판사"]},
+# 3. 운동 데이터베이스 (딕셔너리 구조)
+# 부위별: [근력 운동 리스트], [추천 유산소]
+workout_db = {
+    "상체 (가슴/등/어깨)": {
+        "strength": [
+            {"name": "푸시업 (Push Up)", "set": "3세트 x 12회", "desc": "가슴과 삼두근 발달에 기초가 되는 운동"},
+            {"name": "덤벨 숄더 프레스", "set": "3세트 x 10회", "desc": "어깨의 볼륨감을 키워주는 필수 운동"},
+            {"name": "벤트오버 로우", "set": "3세트 x 12회", "desc": "등 근육의 선명도를 높여주는 당기기 운동"}
+        ],
+        "cardio": "로잉 머신 (15분) 또는 배틀 로프 (10분)"
+    },
+    "하체 (허벅지/엉덩이)": {
+        "strength": [
+            {"name": "맨몸 스쿼트", "set": "4세트 x 15회", "desc": "하체 운동의 꽃, 엉덩이와 허벅지 전체 자극"},
+            {"name": "런지 (Lunge)", "set": "3세트 x 12회(양발)", "desc": "균형 감각과 허벅지 앞쪽 자극"},
+            {"name": "카프 레이즈", "set": "3세트 x 20회", "desc": "탄탄한 종아리 라인을 만드는 운동"}
+        ],
+        "cardio": "실내 자전거 (20분) 또는 계단 오르기 (15분)"
+    },
+    "코어 (복근/허리)": {
+        "strength": [
+            {"name": "플랭크 (Plank)", "set": "3세트 x 1분 버티기", "desc": "전신 코어 안정성을 높이는 최고의 운동"},
+            {"name": "크런치", "set": "3세트 x 15회", "desc": "상복부를 쥐어짜는 듯한 자극 집중"},
+            {"name": "슈퍼맨 자세", "set": "3세트 x 15회", "desc": "허리(기립근)를 강화하여 통증 예방"}
+        ],
+        "cardio": "마운틴 클라이머 (3세트 x 30초) 또는 버피 테스트"
+    },
+    "전신 (Full Body)": {
+        "strength": [
+            {"name": "데드리프트", "set": "3세트 x 10회", "desc": "전신의 근력을 사용하는 고강도 운동"},
+            {"name": "케틀벨 스윙", "set": "3세트 x 15회", "desc": "유산소와 근력을 동시에 잡는 운동"},
+            {"name": "쓰러스터", "set": "3세트 x 10회", "desc": "스쿼트와 프레스를 결합한 전신 운동"}
+        ],
+        "cardio": "인터벌 러닝 (20분) 또는 수영"
+    }
 }
 
-# 🛠️ 사이드바 레이아웃
+# 4. 사이드바 (사용자 입력)
 with st.sidebar:
-    st.header("⚙️ 설정 및 입력")
-    name = st.text_input("당신의 성함은?", placeholder="이름을 입력하세요 😊")
-    selected_mbti = st.selectbox("자신의 MBTI를 선택하세요 👇", list(mbti_data.keys()))
+    st.header("⚙️ 운동 설정")
+    name = st.text_input("닉네임을 입력하세요", "헬린이")
+    target_part = st.selectbox("오늘 자극할 부위는?", list(workout_db.keys()))
+    intensity = st.select_slider("오늘의 컨디션은?", options=["피곤함", "보통", "최고조🔥"])
     
-    st.info("💡 MBTI는 진로 탐색의 참고용으로 활용하세요!")
-
-# 🎬 메인 콘텐츠
-if name:
-    st.balloons() # 화려한 효과 추가!
-    st.subheader(f"✨ {name}님께 꼭 맞는 보석 같은 직업들을 찾아봤어요!")
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.markdown(f"### {mbti_data[selected_mbti]['emoji']} {selected_mbti}")
-        st.write(f"**{mbti_data[selected_mbti]['desc']}**")
-        
-    with col2:
-        st.success(f"📌 {selected_mbti} 추천 직업군")
-        for job in mbti_data[selected_mbti]['jobs']:
-            st.write(f"✅ {job}")
-
-    # 상세 설명 섹션 (Expander 사용으로 깔끔하게)
-    with st.expander("📚 진로 교육 가이드 보기"):
-        st.write(f"""
-        {selected_mbti} 유형인 {name}님은 평소 논리적이고 체계적인 업무를 선호하실 가능성이 높아요.
-        위 추천 직업들은 {name}님의 성향을 가장 잘 발휘할 수 있는 분야들이지만, 
-        가장 중요한 것은 본인의 '관심'과 '열정'이라는 점을 잊지 마세요! 🌟
-        """)
-
-    # 📊 관련성 차트 (가상 데이터)
     st.write("---")
-    st.markdown("### 📈 유형별 직무 적합도")
-    chart_data = pd.DataFrame({
-        "역량": ["논리력", "창의성", "공감능력", "실행력"],
-        "점수": [85, 92, 78, 88] # 실제 구현 시 MBTI별로 수치 조정 가능
-    })
-    st.bar_chart(chart_data, x="역량", y="점수", color="#FF4B4B")
+    st.info("💡 팁: 꾸준함이 득근의 지름길입니다!")
 
-else:
-    st.warning("👈 왼쪽 사이드바에서 이름을 먼저 입력해 주세요!")
+# 5. 메인 콘텐츠
+st.title(f"🔥 {name}님의 오늘의 운동 처방")
+st.write(f"선택하신 **'{target_part}'** 강화를 위한 최적의 루틴입니다.")
+st.divider()
 
-# 🦶 푸터
+# 데이터 로드
+selected_routine = workout_db[target_part]
+
+# 2단 컬럼 레이아웃
+col1, col2 = st.columns([1.5, 1])
+
+# 왼쪽 컬럼: 근력 운동 (Card UI 적용)
+with col1:
+    st.subheader("🏋️‍♀️ 근력 운동 (Strength)")
+    for exercise in selected_routine["strength"]:
+        # 유튜브 검색 링크 생성
+        search_url = f"https://www.youtube.com/results?search_query={exercise['name']} 운동법"
+        
+        st.markdown(f"""
+        <div class="workout-card">
+            <div class="card-title">📌 {exercise['name']}</div>
+            <div class="card-desc">{exercise['desc']}</div>
+            <div style="margin-top: 10px; font-weight: bold; color: #444;">🎯 목표: {exercise['set']}</div>
+            <div style="margin-top: 10px;">
+                <a href="{search_url}" target="_blank" style="text-decoration: none; color: #FF4B4B; font-size: 0.9em;">
+                    ▶️ 유튜브에서 자세세 확인하기
+                </a>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# 오른쪽 컬럼: 유산소 & 완료 체크
+with col2:
+    st.subheader("🏃 유산소 (Cardio)")
+    st.markdown(f"""
+    <div class="workout-card" style="border-top: 5px solid #1E90FF;">
+        <div class="card-title">🔥 지방 태우기</div>
+        <div class="card-desc">근력 운동 후 아래 유산소를 진행하세요.</div>
+        <h3 style="color: #1E90FF; margin-top:15px;">{selected_routine['cardio']}</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.write("") # 여백
+    st.write("---")
+    
+    # 운동 완료 기능
+    st.write("### ✅ 운동 완료 체크")
+    if st.button("오늘 운동 끝내기! (클릭)"):
+        with st.spinner("기록 저장 중..."):
+            time.sleep(1)
+        st.balloons()
+        st.success(f"수고하셨습니다, {name}님! 오늘 루틴을 완벽하게 소화하셨네요! 🎉")
+
+# 6. 푸터
 st.markdown("---")
-st.caption("© 2026 교육혁신센터 진로 교육 지원 플랫폼 | 모든 꿈을 응원합니다! 🕯️")
+st.caption("© 2026 Smart Health Care System | Developed with Streamlit")
